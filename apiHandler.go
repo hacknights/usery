@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/tidwall/buntdb"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type apiHandler struct {
@@ -32,16 +34,41 @@ func (a *apiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type user struct {
+type dbUser struct {
 	Username string                 `json:"username"`
 	Email    string                 `json:"email"`
 	Password string                 `json:"password"`
 	Claims   map[string]interface{} `json:"claims"`
 }
 
+func newDbUser(username string, email string, password string, claims map[string]interface{}) *dbUser {
+	return &dbUser{
+		Username: username,
+		Email:    email,
+		Password: password,
+		Claims:   claims,
+	}
+}
+
+func hashAndSalt(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func (u *dbUser) validatePassword(password string) bool {
+	b := []byte(password)
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), b); err != nil {
+		return false
+	}
+	return true
+}
+
 func (a *apiHandler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
-	var u user
+	var u newUserRequest
 	if err := decoder.Decode(&u); err != nil {
 		internalServerError(w, err)
 		return
@@ -81,20 +108,31 @@ func (a *apiHandler) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 func (a *apiHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
-	var u user
+	var u newUserRequest
 	if err := decoder.Decode(&u); err != nil {
 		internalServerError(w, err)
 		return
 	}
 
-	b, err := json.Marshal(u)
+	encryptedPassword, err := hashAndSalt(u.Password)
+	if err != nil {
+		internalServerError(w, err)
+		return
+	}
+
+	dbUser := newDbUser(u.Username, u.Email, encryptedPassword, u.Claims)
+	b, err := json.Marshal(dbUser)
 	if err != nil {
 		internalServerError(w, err)
 		return
 	}
 
 	if err := a.db.Update(func(tx *buntdb.Tx) error {
-		_, _, err := tx.Set(u.Username, string(b), nil)
+		if _, err := tx.Get(dbUser.Username); err == nil {
+			return errors.New("username unavailable")
+		}
+
+		_, _, err = tx.Set(dbUser.Username, string(b), nil)
 		if err != nil {
 			return err
 		}
