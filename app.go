@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -56,5 +55,10 @@ func notFoundError(w http.ResponseWriter) {
 
 func internalServerError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprint(w, err.Error())
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+func unauthorizedError(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusUnauthorized)
+	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }

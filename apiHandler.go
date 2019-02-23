@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/tidwall/buntdb"
 	"golang.org/x/crypto/bcrypt"
@@ -67,25 +69,70 @@ func (u *dbUser) validatePassword(password string) bool {
 }
 
 func (a *apiHandler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	var u newUserRequest
-	if err := decoder.Decode(&u); err != nil {
-		internalServerError(w, err)
+	u := authenticateUserRequest{}
+	if err := decodeBasicAuth(&u, r.Header.Get("Authorization")); err != nil {
+		unauthorizedError(w)
 		return
 	}
 
 	if err := a.db.View(func(tx *buntdb.Tx) error {
-		s, err := tx.Get(u.Username)
+		s, err := tx.Get(u.username)
 		if err != nil {
 			return err
 		}
+
+		d := dbUser{}
+		if err := json.Unmarshal([]byte(s), &d); err != nil {
+			return err
+		}
+
+		if valid := d.validatePassword(u.password); !valid {
+			return errors.New("unauthorized")
+		}
+
 		w.Header().Set("content-type", "application/json")
-		defer fmt.Fprintf(w, s)
+		response := authenticatedUserResponse{
+			Claims: d.Claims,
+		}
+
+		b, err := json.Marshal(response)
+		if err != nil {
+			return err
+		}
+
+		defer fmt.Fprintf(w, "%s", b)
 		return nil
 	}); err != nil {
-		internalServerError(w, err)
+		unauthorizedError(w)
 		return
 	}
+}
+
+type authenticateUserRequest struct {
+	username string
+	password string
+}
+
+type authenticatedUserResponse struct {
+	Claims map[string]interface{} `json:"claims"`
+}
+
+func decodeBasicAuth(u *authenticateUserRequest, encodedCredentials string) error {
+	auth := strings.SplitN(encodedCredentials, " ", 2)
+	if auth[0] != "Basic" {
+		return errors.New("must be basic auth")
+	}
+
+	b, err := base64.StdEncoding.DecodeString(auth[1])
+	if err != nil {
+		return err
+	}
+
+	decoded := strings.SplitN(string(b), ":", 2)
+	u.username = decoded[0]
+	u.password = decoded[1]
+
+	return nil
 }
 
 func (a *apiHandler) handleUsers(w http.ResponseWriter, r *http.Request) {
