@@ -58,7 +58,7 @@ func internalServerError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
-func unauthorizedError(w http.ResponseWriter) {
+func unauthorizedError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusUnauthorized)
-	http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	http.Error(w, err.Error(), http.StatusUnauthorized)
 }
