@@ -10,9 +10,13 @@ import (
 )
 
 func main() {
+
+	//TODO: with config
+	app := newAppHandler()
+
 	s := &http.Server{ //TODO: TLS
 		Addr:           ":8080", //TODO: use config
-		Handler:        newApp(),
+		Handler:        app,
 		ReadTimeout:    5 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		IdleTimeout:    120 * time.Second,

@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/hacknights/middleware"
 	"github.com/tidwall/buntdb"
 )
 
@@ -13,7 +14,7 @@ type app struct {
 	api *apiHandler
 }
 
-func newApp() *app {
+func newAppHandler() http.Handler {
 	db, err := buntdb.Open(":memory:")
 	if err != nil {
 
@@ -24,7 +25,10 @@ func newApp() *app {
 		api: newApiHandler(db),
 	}
 
-	return a
+	return middleware.Use(
+		middleware.TraceIDs,
+		middleware.Logging,
+		middleware.Recuperate)(a.ServeHTTP)
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,16 +53,13 @@ func shiftPath(p string) (head, tail string) {
 }
 
 func notFoundError(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNotFound)
 	http.Error(w, "Not Found", http.StatusNotFound)
 }
 
 func internalServerError(w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 func unauthorizedError(w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusUnauthorized)
 	http.Error(w, err.Error(), http.StatusUnauthorized)
 }
