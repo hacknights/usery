@@ -10,8 +10,9 @@ import (
 )
 
 type app struct {
-	db  *buntdb.DB
-	api *apiHandler
+	db    *buntdb.DB
+	users *usersHandler
+	auth  *authHandler
 }
 
 func newAppHandler() http.Handler {
@@ -21,8 +22,9 @@ func newAppHandler() http.Handler {
 	}
 
 	a := &app{
-		db:  db,
-		api: newApiHandler(db),
+		db:    db,
+		users: newUsersHandler(db),
+		auth:  newAuthHandler(db),
 	}
 
 	return middleware.Use(
@@ -35,12 +37,14 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = shiftPath(r.URL.Path)
 
-	if head == "api" {
-		a.api.ServeHTTP(w, r)
-		return
+	switch head {
+	case "users":
+		a.users.ServeHTTP(w, r)
+	case "authenticate":
+		a.auth.ServeHTTP(w, r)
+	default:
+		notFoundError(w)
 	}
-
-	notFoundError(w)
 }
 
 func shiftPath(p string) (head, tail string) {

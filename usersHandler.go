@@ -10,27 +10,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type apiHandler struct {
+type usersHandler struct {
 	db *buntdb.DB
 }
 
-func newApiHandler(db *buntdb.DB) *apiHandler {
-	return &apiHandler{
+func newUsersHandler(db *buntdb.DB) *usersHandler {
+	return &usersHandler{
 		db: db,
-	}
-}
-
-func (a *apiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var head string
-	head, r.URL.Path = shiftPath(r.URL.Path)
-
-	switch head {
-	case "users":
-		a.handleUsers(w, r)
-	case "authenticate":
-		a.handleAuthenticate(w, r)
-	default:
-		notFoundError(w)
 	}
 }
 
@@ -50,6 +36,15 @@ func newDbUser(username string, email string, password string, claims map[string
 	}
 }
 
+func (u *dbUser) incrementRev() {
+	if val := u.Claims["rev"]; val == nil {
+		u.Claims["rev"] = 1
+	} else {
+		rev := val.(int)
+		u.Claims["rev"] = rev + 1
+	}
+}
+
 func hashAndSalt(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
@@ -58,7 +53,7 @@ func hashAndSalt(password string) (string, error) {
 	return string(hash), nil
 }
 
-func (a *apiHandler) handleUsers(w http.ResponseWriter, r *http.Request) {
+func (a *usersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = shiftPath(r.URL.Path)
 	p := fmt.Sprintf("%s%s", r.URL.Path, r.Method)
@@ -76,7 +71,7 @@ func (a *apiHandler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *apiHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
+func (a *usersHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var u newUserRequest
 	if err := decoder.Decode(&u); err != nil {
@@ -91,6 +86,7 @@ func (a *apiHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbUser := newDbUser(u.Username, u.Email, encryptedPassword, u.Claims)
+	dbUser.incrementRev()
 	b, err := json.Marshal(dbUser)
 	if err != nil {
 		internalServerError(w, err)
@@ -113,13 +109,13 @@ func (a *apiHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *apiHandler) handlePostClaims(id string) http.HandlerFunc {
+func (a *usersHandler) handlePostClaims(id string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, id)
 	}
 }
 
-func (a *apiHandler) handleDeleteClaims(id string) http.HandlerFunc {
+func (a *usersHandler) handleDeleteClaims(id string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 	}
