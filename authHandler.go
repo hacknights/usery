@@ -23,25 +23,33 @@ func (a *apiHandler) handleAuthenticate(w http.ResponseWriter, r *http.Request) 
 	authType, err := authType(r)
 	if err != nil {
 		unauthorizedError(w, err)
+		return
 	}
 
 	switch authType {
 	case "Basic":
 		a.handleBasicAuth(w, r)
 		return
+	case "Bearer":
+		return
 	}
 }
 
 func authType(r *http.Request) (string, error) {
-	authType := strings.SplitN(r.Header.Get("Authorization"), " ", 2)[0]
-	switch authType {
-	case "Basic":
-		return authType, nil
-	case "Bearer":
-		return authType, nil
-	default:
+	match := firstCaseInsensitivePrefixMatch(r.Header.Get("Authorization"), "Basic ", "Bearer ")
+	if len(match) < 1 {
 		return "", errors.New("only basic and bearer auth are supported")
 	}
+	return match[:len(match)-1], nil
+}
+
+func firstCaseInsensitivePrefixMatch(value string, prefixes ...string) string {
+	for _, prefix := range prefixes {
+		if len(value) >= len(prefix) && strings.EqualFold(value[:len(prefix)], prefix) {
+			return prefix
+		}
+	}
+	return ""
 }
 
 func (a *apiHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
