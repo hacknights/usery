@@ -11,6 +11,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type authHandler struct {
+	db *buntdb.DB
+}
+
+func newAuthHandler(db *buntdb.DB) *authHandler {
+	return &authHandler{
+		db: db,
+	}
+}
+
 type authenticatedUserResponse struct {
 	Claims map[string]interface{} `json:"claims"`
 }
@@ -19,7 +29,7 @@ func newAuthenticatedUserResponse() *authenticatedUserResponse {
 	return &authenticatedUserResponse{}
 }
 
-func (a *apiHandler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
+func (a *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	authType, err := authType(r)
 	if err != nil {
 		unauthorizedError(w, err)
@@ -52,7 +62,7 @@ func firstCaseInsensitivePrefixMatch(value string, prefixes ...string) string {
 	return ""
 }
 
-func (a *apiHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
+func (a *authHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
 	user, pass, ok := r.BasicAuth()
 	if !ok {
 		unauthorizedError(w, errors.New("invalid basic auth value"))
@@ -75,7 +85,7 @@ func (a *apiHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s", b)
 }
 
-func (a *apiHandler) getClaims(username, password string, r *authenticatedUserResponse) error {
+func (a *authHandler) getClaims(username, password string, r *authenticatedUserResponse) error {
 	const invalidCredentials = "invalid credentials"
 	if err := a.db.View(func(tx *buntdb.Tx) error {
 		s, err := tx.Get(username)
