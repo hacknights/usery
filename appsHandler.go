@@ -26,20 +26,21 @@ func newAppsHandler(n negotiator.Factory, db *buntdb.DB) *appsHandler {
 func (h *appsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
+		h.handlePostApp(w, r)
 	default:
 		h.negotiator(w, r).NotFound()
 	}
 }
 
 type dbApp struct {
-	Id      string   `json:"id"`
+	ID      string   `json:"id"`
 	Appname string   `json:"appname"`
 	Users   []dbUser `json:"users"`
 }
 
 func newDbApp(appname string) *dbApp {
 	return &dbApp{
-		Id:      uuid.New().String(),
+		ID:      uuid.New().String(),
 		Appname: appname,
 	}
 }
@@ -66,10 +67,10 @@ func (h *appsHandler) handlePostApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.db.Update(func(tx *buntdb.Tx) error {
-		if _, _, err := tx.Set(dbApp.Id, string(b), nil); err != nil {
+		if _, _, err := tx.Set(dbApp.ID, string(b), nil); err != nil {
 			return err
 		}
-		n.OK(dbApp.Id)
+		n.OK(dbApp.ID)
 		return nil
 	}); err != nil {
 		n.InternalServerError(err)
