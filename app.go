@@ -6,13 +6,16 @@ import (
 	"strings"
 
 	"github.com/hacknights/middleware"
+	"github.com/hacknights/negotiator"
 	"github.com/tidwall/buntdb"
 )
 
 type app struct {
-	db    *buntdb.DB
-	users *usersHandler
-	auth  *authHandler
+	negotiator negotiator.Factory
+	db         *buntdb.DB
+	apps       *appsHandler
+	users      *usersHandler
+	auth       *authHandler
 }
 
 func newAppHandler() http.Handler {
@@ -21,10 +24,13 @@ func newAppHandler() http.Handler {
 
 	}
 
+	n := negotiator.NewNegotiator
 	a := &app{
-		db:    db,
-		users: newUsersHandler(db),
-		auth:  newAuthHandler(db),
+		negotiator: n,
+		db:         db,
+		apps:       newAppsHandler(n, db),
+		users:      newUsersHandler(n, db),
+		auth:       newAuthHandler(n, db),
 	}
 
 	return middleware.Use(
@@ -38,12 +44,14 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	head, r.URL.Path = shiftPath(r.URL.Path)
 
 	switch head {
+	case "apps":
+		a.apps.ServeHTTP(w, r)
 	case "users":
 		a.users.ServeHTTP(w, r)
 	case "authenticate":
 		a.auth.ServeHTTP(w, r)
 	default:
-		notFoundError(w)
+		a.negotiator(w, r).NotFound()
 	}
 }
 
@@ -54,16 +62,4 @@ func shiftPath(p string) (head, tail string) {
 		return p[1:], "/"
 	}
 	return p[1:i], p[i:]
-}
-
-func notFoundError(w http.ResponseWriter) {
-	http.Error(w, "Not Found", http.StatusNotFound)
-}
-
-func internalServerError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
-func unauthorizedError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusUnauthorized)
 }

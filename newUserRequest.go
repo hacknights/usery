@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/mail"
+	"strings"
 )
 
 type newUserRequest struct {
@@ -13,12 +15,17 @@ type newUserRequest struct {
 }
 
 func (r *newUserRequest) validateRequest() error {
+	var sb strings.Builder
 	if err := r.validateUsername(); err != nil {
-		return err
+		writeError(&sb, err)
 	}
 
 	if err := r.validateEmail(); err != nil {
-		return err
+		writeError(&sb, err)
+	}
+
+	if 0 < sb.Len() {
+		return errors.New(sb.String())
 	}
 	return nil
 }
@@ -35,4 +42,8 @@ func (r *newUserRequest) validateEmail() error {
 		return errors.New("invalid email address")
 	}
 	return nil
+}
+
+func writeError(sb *strings.Builder, err error) {
+	sb.WriteString(fmt.Sprintf("%s\n", err.Error()))
 }

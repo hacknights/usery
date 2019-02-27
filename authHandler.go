@@ -7,17 +7,21 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hacknights/negotiator"
+
 	"github.com/tidwall/buntdb"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type authHandler struct {
-	db *buntdb.DB
+	negotiator negotiator.Factory
+	db         *buntdb.DB
 }
 
-func newAuthHandler(db *buntdb.DB) *authHandler {
+func newAuthHandler(n negotiator.Factory, db *buntdb.DB) *authHandler {
 	return &authHandler{
-		db: db,
+		negotiator: n,
+		db:         db,
 	}
 }
 
@@ -29,16 +33,16 @@ func newAuthenticatedUserResponse() *authenticatedUserResponse {
 	return &authenticatedUserResponse{}
 }
 
-func (a *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	authType, err := authType(r)
 	if err != nil {
-		unauthorizedError(w, err)
+		h.negotiator(w, r).InternalServerError(err)
 		return
 	}
 
 	switch authType {
 	case "Basic":
-		a.handleBasicAuth(w, r)
+		h.handleBasicAuth(w, r)
 		return
 	case "Bearer":
 		return
@@ -62,22 +66,22 @@ func firstCaseInsensitivePrefixMatch(value string, prefixes ...string) string {
 	return ""
 }
 
-func (a *authHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
+func (h *authHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
 	user, pass, ok := r.BasicAuth()
 	if !ok {
-		unauthorizedError(w, errors.New("invalid basic auth value"))
+		h.negotiator(w, r).Unauthorized("invalid basic auth value")
 		return
 	}
 
 	response := newAuthenticatedUserResponse()
-	if err := a.getClaims(user, pass, response); err != nil {
-		unauthorizedError(w, err)
+	if err := h.getClaims(user, pass, response); err != nil {
+		h.negotiator(w, r).UnauthorizedError(err)
 		return
 	}
 
 	b, err := json.Marshal(response)
 	if err != nil {
-		internalServerError(w, err)
+		h.negotiator(w, r).UnauthorizedError(err)
 		return
 	}
 
@@ -85,9 +89,9 @@ func (a *authHandler) handleBasicAuth(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s", b)
 }
 
-func (a *authHandler) getClaims(username, password string, r *authenticatedUserResponse) error {
+func (h *authHandler) getClaims(username, password string, r *authenticatedUserResponse) error {
 	const invalidCredentials = "invalid credentials"
-	if err := a.db.View(func(tx *buntdb.Tx) error {
+	if err := h.db.View(func(tx *buntdb.Tx) error {
 		s, err := tx.Get(username)
 		if err != nil {
 			return errors.New(invalidCredentials)

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 const userNameError = "username must be greater than 3 and less than 40"
 const emailError = "invalid email address"
@@ -52,6 +55,23 @@ func TestValidateEmail(t *testing.T) {
 	r := newUserRequest{Email: "test@test.com"}
 	if err := r.validateEmail(); err != nil {
 		errorf(t, emailError, err.Error())
+	}
+}
+
+func TestValidateRequest_Fail(t *testing.T) {
+	r := newUserRequest{}
+	if err := r.validateRequest(); err.Error() != fmt.Sprintf("%s\n%s\n", userNameError, emailError) {
+		errorf(t, emailError, err.Error())
+	}
+}
+
+func TestValidateRequest(t *testing.T) {
+	r := newUserRequest{
+		Username: "john",
+		Email:    "test@test.com",
+	}
+	if err := r.validateRequest(); err != nil {
+		errorf(t, nil, err.Error())
 	}
 }
 

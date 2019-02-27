@@ -6,17 +6,21 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/hacknights/negotiator"
+
 	"github.com/tidwall/buntdb"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type usersHandler struct {
-	db *buntdb.DB
+	negotiator negotiator.Factory
+	db         *buntdb.DB
 }
 
-func newUsersHandler(db *buntdb.DB) *usersHandler {
+func newUsersHandler(n negotiator.Factory, db *buntdb.DB) *usersHandler {
 	return &usersHandler{
-		db: db,
+		negotiator: n,
+		db:         db,
 	}
 }
 
@@ -53,58 +57,69 @@ func hashAndSalt(password string) (string, error) {
 	return string(hash), nil
 }
 
-func (a *usersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *usersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = shiftPath(r.URL.Path)
 	p := fmt.Sprintf("%s%s", r.URL.Path, r.Method)
 
 	switch p {
 	case "/POST":
-		a.handlePostUser(w, r)
+		h.handlePostUser(w, r)
 	case "/claimsPOST":
-		a.handlePostClaims(head).ServeHTTP(w, r)
+		h.handlePostClaims(head).ServeHTTP(w, r)
 	case "/claimsDELETE":
-		a.handleDeleteClaims(head).ServeHTTP(w, r)
+		h.handleDeleteClaims(head).ServeHTTP(w, r)
 	default:
-		notFoundError(w)
+		h.negotiator(w, r).NotFound()
 		return
 	}
 }
 
-func (a *usersHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
+func (h *usersHandler) handlePostUser(w http.ResponseWriter, r *http.Request) {
+	n := h.negotiator(w, r)
 	decoder := json.NewDecoder(r.Body)
-	var u newUserRequest
-	if err := decoder.Decode(&u); err != nil {
-		internalServerError(w, err)
+	var ur newUserRequest
+	if err := decoder.Decode(&ur); err != nil {
+		n.InternalServerError(err)
 		return
 	}
 
-	encryptedPassword, err := hashAndSalt(u.Password)
+	if err := ur.validateRequest(); err != nil {
+		n.BadRequestError(err)
+		return
+	}
+
+	encryptedPassword, err := hashAndSalt(ur.Password)
 	if err != nil {
-		internalServerError(w, err)
+		n.InternalServerError(err)
 		return
 	}
 
-	dbUser := newDbUser(u.Username, u.Email, encryptedPassword, u.Claims)
+	dbUser := newDbUser(ur.Username, ur.Email, encryptedPassword, ur.Claims)
 	dbUser.incrementRev()
 	b, err := json.Marshal(dbUser)
 	if err != nil {
-		internalServerError(w, err)
+		n.InternalServerError(err)
 		return
 	}
 
-	if err := a.db.Update(func(tx *buntdb.Tx) error {
+	const usernameUnavailableErr = "username unavailable"
+	if err := h.db.Update(func(tx *buntdb.Tx) error {
 		if _, err := tx.Get(dbUser.Username); err == nil {
-			return errors.New("username unavailable")
+			return errors.New(usernameUnavailableErr)
 		}
 
-		_, _, err = tx.Set(dbUser.Username, string(b), nil)
-		if err != nil {
+		if _, _, err := tx.Set(dbUser.Username, string(b), nil); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
-		internalServerError(w, err)
+		if err.Error() == usernameUnavailableErr {
+			n.BadRequestError(err)
+			return
+		}
+
+		n.InternalServerError(err)
 		return
 	}
 }
