@@ -1,12 +1,12 @@
-package main
+package requests
 
 import "errors"
 
-type newAppRequest struct {
+type NewApp struct {
 	Appname string
 }
 
-func (r *newAppRequest) validateRequest() error {
+func (r *NewApp) Validate() error {
 	if length := len(r.Appname); length < 3 || 40 < length {
 		return errors.New("appname must be greater than 3 and less than 40")
 	}
