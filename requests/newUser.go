@@ -1,4 +1,4 @@
-package main
+package requests
 
 import (
 	"errors"
@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-type newUserRequest struct {
+type NewUser struct {
 	Username string
 	Email    string
 	Password string
 	Claims   map[string]interface{}
 }
 
-func (r *newUserRequest) validateRequest() error {
+func (r *NewUser) validateRequest() error {
 	var sb strings.Builder
 	if err := r.validateUsername(); err != nil {
 		writeError(&sb, err)
@@ -30,14 +30,14 @@ func (r *newUserRequest) validateRequest() error {
 	return nil
 }
 
-func (r *newUserRequest) validateUsername() error {
+func (r *NewUser) validateUsername() error {
 	if length := len(r.Username); length < 3 || 40 < length {
 		return errors.New("username must be greater than 3 and less than 40")
 	}
 	return nil
 }
 
-func (r *newUserRequest) validateEmail() error {
+func (r *NewUser) validateEmail() error {
 	if _, err := mail.ParseAddress(r.Email); err != nil {
 		return errors.New("invalid email address")
 	}

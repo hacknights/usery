@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"usery/db"
 
 	"github.com/hacknights/middleware"
 	"github.com/hacknights/negotiator"
@@ -12,25 +13,26 @@ import (
 
 type app struct {
 	negotiator negotiator.Factory
-	db         *buntdb.DB
+	db         *db.DB
 	apps       *appsHandler
-	users      *usersHandler
-	auth       *authHandler
+	// users      *usersHandler
+	// auth       *authHandler
 }
 
 func newAppHandler() http.Handler {
-	db, err := buntdb.Open(":memory:")
+	bdb, err := buntdb.Open(":memory:")
 	if err != nil {
 
 	}
 
+	db := db.NewDB(bdb)
 	n := negotiator.NewNegotiator
 	a := &app{
 		negotiator: n,
 		db:         db,
 		apps:       newAppsHandler(n, db),
-		users:      newUsersHandler(n, db),
-		auth:       newAuthHandler(n, db),
+		// users:      newUsersHandler(n, db),
+		// auth:       newAuthHandler(n, db),
 	}
 
 	return middleware.Use(
@@ -46,10 +48,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch head {
 	case "apps":
 		a.apps.ServeHTTP(w, r)
-	case "users":
-		a.users.ServeHTTP(w, r)
-	case "authenticate":
-		a.auth.ServeHTTP(w, r)
+	// case "users":
+	// 	a.users.ServeHTTP(w, r)
+	// case "authenticate":
+	// 	a.auth.ServeHTTP(w, r)
 	default:
 		a.negotiator(w, r).NotFound()
 	}
